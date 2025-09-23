@@ -1,0 +1,49 @@
+version: 0.2
+env:
+  variables:
+    APP_NAME: "devsecops-app"
+    AWS_DEFAULT_REGION: "ap-south-1"
+phases:
+  install:
+    runtime-versions:
+      java: corretto11
+      docker: 19
+    commands:
+      - echo "Installing extra tools..."
+      - pip3 install checkov
+      - wget -qO- https://raw.githubusercontent.com/trufflesecurity/truffleHog/master/install.sh || true
+      # optional installs for scanning
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin 602670427178.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - echo "Running git-secrets"
+      - git secrets --scan || true
+  build:
+    commands:
+      - echo "Running Maven build and tests"
+      - mvn -B -DskipTests=false test package
+      - echo "Running OWASP Dependency-Check"
+      - mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
+      - echo "Running SAST with SonarQube (optional)"
+      - sonar-scanner -Dsonar.projectKey=$APP_NAME -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_TOKEN || true
+      - echo "Building Docker image..."
+      - docker build -t $APP_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+      - docker tag $APP_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION 602670427178.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$APP_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION
+  post_build:
+    commands:
+      - echo "Pushing Docker image to ECR..."
+      - docker push 602670427178.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$APP_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo "Running Trivy image scan..."
+      - trivy image --exit-code 1 --severity CRITICAL,HIGH 602670427178.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$APP_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION || { echo "❌ Trivy found issues"; exit 1; }
+      - echo "Running IaC scan with tfsec..."
+      - tfsec ./terraform || true
+      - echo "Running PII detection..."
+      - python3 tools/pii_detector.py || exit 1
+      - echo "Generating summary report..."
+      - mkdir -p reports
+      - python3 tools/generate_summary.py --sonar sonar-report.json --trivy trivy.json --depdep dep-check-report.xml || true
+artifacts:
+  files:
+    - target/*.jar
+    - reports/**
