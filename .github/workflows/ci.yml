@@ -28,7 +28,7 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # 4. Maven build & tests
+      # 4. Build & test
       - name: Run Maven tests & package
         run: mvn -B clean package
 
@@ -36,7 +36,7 @@ jobs:
       - name: Run OWASP Dependency-Check
         run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
 
-      # 6. SonarCloud scan
+      # 6. SonarCloud scan (won't fail workflow)
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
@@ -54,25 +54,25 @@ jobs:
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
             | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
-      # 8. Build Docker Image
+      # 8. Build Docker image
       - name: Build Docker Image
         run: |
           docker build -t devsecops-app:${{ github.sha }} .
           docker tag devsecops-app:${{ github.sha }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
 
-      # 9. Push Docker Image
+      # 9. Push Docker image
       - name: Push Docker Image
         run: docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
 
-      # 10. Run Trivy Scan
+      # 10. Trivy scan
       - name: Run Trivy Scan
         run: docker run --rm aquasec/trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
 
-      # 11. Run tfsec Scan
+      # 11. tfsec scan
       - name: Run tfsec Scan
         run: docker run --rm -v $(pwd):/src aquasec/tfsec /src || true
 
-      # 12. Run PII Detector
+      # 12. PII Detector
       - name: Run PII Detector
         run: python3 tools/pii_detector.py || true
 
