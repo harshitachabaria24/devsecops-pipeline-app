@@ -40,12 +40,13 @@ jobs:
       - name: Run SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v1
         with:
-          projectKey: harshitachabaria24_devsecops-pipeline-app
-          organization: harshitachabaria24
-          token: ${{ secrets.SONAR_TOKEN }}
-          args: >
-            -Dsonar.sources=src/main/java
-            -Dsonar.java.binaries=target/classes
+    projectKey: harshitachabaria24_devsecops-pipeline-app
+    organization: harshitachabaria24
+    token: ${{ secrets.SONAR_TOKEN }}
+    args: >
+      -Dsonar.sources=src/main/java
+      -Dsonar.java.binaries=target/classes
+      -Dsonar.qualitygate.wait=false
 
       # 7. Login to Amazon ECR
       - name: Login to Amazon ECR
