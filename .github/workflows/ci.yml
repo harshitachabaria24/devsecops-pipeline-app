@@ -9,15 +9,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2. Setup JDK 17
       - name: Setup JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
 
+      # 3. Cache Maven packages
       - name: Cache Maven packages
         uses: actions/cache@v3
         with:
@@ -25,44 +28,58 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
+      # 4. Maven build & tests
       - name: Run Maven tests & package
         run: mvn -B clean package
 
+      # 5. OWASP Dependency-Check
       - name: Run OWASP Dependency-Check
         run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
 
+      # 6. SonarCloud scan
       - name: Run SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v1
         with:
           projectKey: harshitachabaria24_devsecops-pipeline-app
           organization: harshitachabaria24
           token: ${{ secrets.SONAR_TOKEN }}
+          args: >
+            -Dsonar.sources=src/main/java
+            -Dsonar.java.binaries=target/classes
 
+      # 7. Login to Amazon ECR
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
             | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
+      # 8. Build Docker Image
       - name: Build Docker Image
         run: |
           docker build -t devsecops-app:${{ github.sha }} .
           docker tag devsecops-app:${{ github.sha }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
 
+      # 9. Push Docker Image
       - name: Push Docker Image
         run: docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
 
+      # 10. Run Trivy Scan
       - name: Run Trivy Scan
         run: docker run --rm aquasec/trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
 
+      # 11. Run tfsec Scan
       - name: Run tfsec Scan
         run: docker run --rm -v $(pwd):/src aquasec/tfsec /src || true
 
+      # 12. Run PII Detector
       - name: Run PII Detector
         run: python3 tools/pii_detector.py || true
 
+      # 13. Generate Summary Report
       - name: Generate Summary Report
         run: python3 tools/generate_summary.py
 
+      # 14. Deploy to AWS CodeDeploy
       - name: Deploy to AWS CodeDeploy
         run: |
           aws deploy create-deployment \
@@ -74,9 +91,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2. Copy JAR to EC2
       - name: Copy JAR to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -86,6 +105,7 @@ jobs:
           source: "target/devsecops-app-1.0-SNAPSHOT.jar"
           target: "/home/ec2-user/app/"
 
+      # 3. Restart App on EC2
       - name: Restart App on EC2
         uses: appleboy/ssh-action@v0.1.7
         with:
