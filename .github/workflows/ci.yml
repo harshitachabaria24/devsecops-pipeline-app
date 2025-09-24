@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2. Setup JDK 17
+      # 2. Setup Java 17
       - name: Setup JDK 17
         uses: actions/setup-java@v3
         with:
@@ -37,16 +37,16 @@ jobs:
         run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
 
       # 6. SonarCloud scan
-      - name: Run SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v1
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
         with:
-    projectKey: harshitachabaria24_devsecops-pipeline-app
-    organization: harshitachabaria24
-    token: ${{ secrets.SONAR_TOKEN }}
-    args: >
-      -Dsonar.sources=src/main/java
-      -Dsonar.java.binaries=target/classes
-      -Dsonar.qualitygate.wait=false
+          token: ${{ secrets.SONAR_TOKEN }}
+          args: >
+            -Dsonar.projectKey=harshitachabaria24_devsecops-pipeline-app
+            -Dsonar.organization=harshitachabaria24
+            -Dsonar.sources=src/main/java
+            -Dsonar.java.binaries=target/classes
+            -Dsonar.qualitygate.wait=false
 
       # 7. Login to Amazon ECR
       - name: Login to Amazon ECR
@@ -116,3 +116,4 @@ jobs:
           script: |
             pkill -f 'devsecops-app' || true
             nohup java -jar /home/ec2-user/app/devsecops-app-1.0-SNAPSHOT.jar > app.log 2>&1 &
+
