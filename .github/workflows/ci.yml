@@ -25,7 +25,7 @@ jobs:
         run: mvn org.owasp:dependency-check-maven:check -DskipTests || true
 
       - name: Upload Dependency Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: target/dependency-check-report.html
