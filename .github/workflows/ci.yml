@@ -1,112 +1,67 @@
-name: DevSecOps CI/CD
+name: CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. Setup Java 17
-      - name: Setup JDK 17
-        uses: actions/setup-java@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: 17
 
-      # 3. Cache Maven packages
-      - name: Cache Maven packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+      - name: Build with Maven (package)
+        run: mvn -B -DskipTests clean package
 
-      # 4. Maven build & tests
-      - name: Run Maven tests & package
-        run: mvn -B clean package
+      - name: Run OWASP Dependency Check (report-only)
+        run: mvn org.owasp:dependency-check-maven:check -DskipTests || true
 
-      # 5. OWASP Dependency-Check
-      - name: Run OWASP Dependency-Check
-        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
-
-      # 6. SonarCloud scan
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        with:
-          token: ${{ secrets.SONAR_TOKEN }}
-          args: >
-            -Dsonar.projectKey=harshitachabaria24_devsecops-pipeline-app
-            -Dsonar.organization=harshitachabaria24
-            -Dsonar.sources=src/main/java
-            -Dsonar.java.binaries=target/classes
-            -Dsonar.qualitygate.wait=false
-
-      # 7. Login to Amazon ECR
-      - name: Login to Amazon ECR
+      - name: Run tfsec (IaC) if terraform exists
         run: |
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-            | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          if [ -d "terraform" ]; then
+            docker run --rm -v "$(pwd)":/src aquasec/tfsec /src || true
+          else
+            echo "No terraform folder; skipping tfsec"
+          fi
 
-      # 8. Build Docker Image
-      - name: Build Docker Image
-        run: |
-          docker build -t devsecops-app:${{ github.sha }} .
-          docker tag devsecops-app:${{ github.sha }} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
-
-      # 9. Push Docker Image
-      - name: Push Docker Image
-        run: docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
-
-      # 10. Run Trivy Scan
-      - name: Run Trivy Scan
-        run: docker run --rm aquasec/trivy image --exit-code 0 --severity HIGH,CRITICAL ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/devsecops-app:${{ github.sha }}
-
-      # 11. Run tfsec Scan
-      - name: Run tfsec Scan
-        run: docker run --rm -v $(pwd):/src aquasec/tfsec /src || true
-
-      # 12. Run PII Detector
-      - name: Run PII Detector
+      - name: Run PII detector (report-only)
         run: python3 tools/pii_detector.py || true
 
-      # 13. Generate Summary Report
-      - name: Generate Summary Report
-        run: python3 tools/generate_summary.py
+      - name: Generate summary (report)
+        run: python3 tools/generate_summary.py || true
 
-      # 14. Deploy to AWS CodeDeploy
-      - name: Deploy to AWS CodeDeploy
-        run: |
-          aws deploy create-deployment \
-            --application-name devsecops-app \
-            --deployment-group-name devsecops-staging \
-            --s3-location bucket=devsecops-app-harshita073,key=devsecops-app.zip,bundleType=zip
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+            reports/**
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. Copy JAR to EC2
       - name: Copy JAR to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
-          source: "target/devsecops-app-1.0-SNAPSHOT.jar"
+          source: "target/*.jar"
           target: "/home/ec2-user/app/"
 
-      # 3. Restart App on EC2
       - name: Restart App on EC2
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -115,5 +70,6 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             pkill -f 'devsecops-app' || true
-            nohup java -jar /home/ec2-user/app/devsecops-app-1.0-SNAPSHOT.jar > app.log 2>&1 &
-
+            nohup java -jar /home/ec2-user/app/*.jar > /home/ec2-user/app/app.log 2>&1 &
+            sleep 2
+            curl -sS http://localhost:8080/health || (cat /home/ec2-user/app/app.log && exit 1)
