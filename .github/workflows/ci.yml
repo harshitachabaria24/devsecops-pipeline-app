@@ -71,3 +71,29 @@ jobs:
             --application-name devsecops-app \
             --deployment-group-name devsecops-staging \
             --s3-location bucket=devsecops-app-harshita073,key=devsecops-app.zip,bundleType=zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Copy JAR to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "target/devsecops-app-1.0-SNAPSHOT.jar"
+          target: "/home/ec2-user/app/"
+
+      - name: Restart App on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            pkill -f 'devsecops-app' || true
+            nohup java -jar /home/ec2-user/app/devsecops-app-1.0-SNAPSHOT.jar > app.log 2>&1 &
