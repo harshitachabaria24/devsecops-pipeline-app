@@ -26,19 +26,17 @@ jobs:
           restore-keys: ${{ runner.os }}-m2
 
       - name: Run Maven tests & package
-        run: mvn -B -DskipTests=false clean package
+        run: mvn -B clean package
 
       - name: Run OWASP Dependency-Check
         run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
 
       - name: Run SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarcloud-github-action@v1
         with:
-          args: >
-            -Dsonar.projectKey=devsecops-app
-            -Dsonar.organization=harshitachabaria24
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          projectKey: harshitachabaria24_devsecops-pipeline-app
+          organization: harshitachabaria24
+          token: ${{ secrets.SONAR_TOKEN }}
 
       - name: Login to Amazon ECR
         run: |
