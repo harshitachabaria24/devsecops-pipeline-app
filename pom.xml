@@ -53,14 +53,18 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
 
-            <!-- OWASP Dependency Check (report-only, build won't fail) -->
+            <!-- OWASP Dependency Check (report-only; will not fail build) -->
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
-                <version>6.5.3</version>
+                <version>12.1.0</version>
                 <configuration>
-                    <failBuildOnCVSS>11</failBuildOnCVSS> <!-- never fails build -->
-                    <format>ALL</format>
+                    <!-- Make this non-blocking for the CI demo -->
+                    <failBuildOnCVSS>11</failBuildOnCVSS>
+                    <formats>
+                      <format>HTML</format>
+                      <format>JSON</format>
+                    </formats>
                     <outputDirectory>${project.build.directory}</outputDirectory>
                 </configuration>
                 <executions>
@@ -74,4 +78,3 @@
         </plugins>
     </build>
 </project>
-
