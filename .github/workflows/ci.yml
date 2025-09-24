@@ -34,19 +34,8 @@ jobs:
 
       # 5. OWASP Dependency-Check
       - name: Run OWASP Dependency-Check
-        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
+        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 
 
-      # 6. SonarCloud scan (won't fail workflow)
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        with:
-          token: ${{ secrets.SONAR_TOKEN }}
-          args: >
-            -Dsonar.projectKey=harshitachabaria24_devsecops-pipeline-app
-            -Dsonar.organization=harshitachabaria24
-            -Dsonar.sources=src/main/java
-            -Dsonar.java.binaries=target/classes
-            -Dsonar.qualitygate.wait=false
 
       # 7. Login to Amazon ECR
       - name: Login to Amazon ECR
