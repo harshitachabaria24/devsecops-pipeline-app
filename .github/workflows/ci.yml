@@ -62,14 +62,10 @@ jobs:
           source: "target/*.jar"
           target: "/home/ec2-user/app/"
 
-      - name: Restart App on EC2
+      - name: Restart app on EC2
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
-          script: |
-            pkill -f 'devsecops-app' || true
-            nohup java -jar /home/ec2-user/app/*.jar > /home/ec2-user/app/app.log 2>&1 &
-            sleep 2
-            curl -sS http://localhost:8080/health || (cat /home/ec2-user/app/app.log && exit 1)
+          script: /home/ec2-user/restart-app.sh
